@@ -13,6 +13,7 @@
 		"tauri": "tauri"
 	},
 	"devDependencies": {
+		"@capacitor/cli": "^6.2.0",
 		"@eslint/compat": "^1.2.3",
 		"@sveltejs/adapter-auto": "^3.0.0",
 		"@sveltejs/kit": "^2.9.0",
@@ -35,6 +36,9 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
+		"@capacitor/android": "^6.2.0",
+		"@capacitor/core": "^6.2.0",
+		"@capacitor/ios": "^6.2.0",
 		"@sveltejs/adapter-static": "^3.0.6"
 	}
 }
