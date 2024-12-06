@@ -1,13 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { uploadedImages, type GalleryImage } from '$lib';
     import { goto } from '$app/navigation';
-
-    interface GalleryImage {
-        id: number;
-        url: string;
-        name: string;
-        timestamp: string;
-    }
+    import { userProfile } from '$lib';
 
     interface ImageFilters {
         brightness: number;
@@ -22,11 +17,11 @@
     }
 
     let showModal = false;
-    let images: GalleryImage[] = [];
     let selectedFiles: File[] = [];
     let previewUrls: string[] = [];
     let showEditMode = false;
     let selectedImageForEdit: GalleryImage | null = null;
+    let editedImageName = '';
     
     let filters: ImageFilters = {
         brightness: 100,
@@ -40,12 +35,7 @@
         grayscale: 0
     };
 
-    onMount(() => {
-        const storedImages = localStorage.getItem('galleryImages');
-        if (storedImages) {
-            images = JSON.parse(storedImages) as GalleryImage[];
-        }
-    });
+    let isProfileOpen = false;
 
     function toggleModal() {
         showModal = !showModal;
@@ -96,28 +86,38 @@
         if (selectedFiles.length === 0) return;
 
         selectedFiles.forEach(file => {
-            const reader = new FileReader();
-            reader.onload = (e: ProgressEvent<FileReader>) => {
-                const result = e.target?.result;
-                if (result && typeof result === 'string') {
-                    const newImage: GalleryImage = {
-                        id: Date.now() + Math.random(),
-                        url: result,
-                        name: file.name,
-                        timestamp: new Date().toISOString()
-                    };
-                    images = [...images, newImage];
-                }
-            };
-            reader.readAsDataURL(file);
+            uploadImage(file);
         });
 
-        localStorage.setItem('galleryImages', JSON.stringify(images));
+        // Reset file selection after upload
+        resetFileSelection();
         toggleModal();
+    }
+
+    function uploadImage(file: File) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const newImage: GalleryImage = {
+                    id: Date.now(), // Unique ID
+                    url: event.target?.result as string,
+                    name: file.name,
+                    timestamp: new Date().toISOString(),
+                    comments: [] // Initialize empty comments array
+                };
+
+                // Add to store (which automatically syncs with localStorage)
+                uploadedImages.update(imgs => [...imgs, newImage]);
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
     }
 
     function openEditMode(image: GalleryImage) {
         selectedImageForEdit = image;
+        editedImageName = image.name; // Initialize with current image name
         showEditMode = true;
         resetFilters();
     }
@@ -200,18 +200,17 @@
                 const filteredImageUrl = canvas.toDataURL('image/jpeg', 0.9);
 
                 // Update the image in the images array
-                images = images.map(image => 
-                    image.id === selectedImageForEdit!.id 
-                        ? { ...image, url: filteredImageUrl } 
-                        : image
+                uploadedImages.update(images => 
+                    images.map(img => 
+                        img.id === selectedImageForEdit!.id 
+                            ? { 
+                                ...img, 
+                                name: editedImageName.trim() || img.name, // Use trimmed name or keep original
+                                url: filteredImageUrl // Preserve the edited image URL
+                            } 
+                            : img
+                    )
                 );
-
-                // Update localStorage
-                try {
-                    localStorage.setItem('galleryImages', JSON.stringify(images));
-                } catch (storageError) {
-                    console.error('Error saving to localStorage:', storageError);
-                }
 
                 // Close edit mode
                 closeEditMode();
@@ -226,13 +225,41 @@
     }
 
     function deleteImage(id: number) {
-        images = images.filter(img => img.id !== id);
-        localStorage.setItem('galleryImages', JSON.stringify(images));
+        uploadedImages.update(imgs => imgs.filter(img => img.id !== id));
     }
 
     function navigateToUrImage() {
         goto('/UrImage');
     }
+
+    function toggleProfile() {
+        isProfileOpen = !isProfileOpen;
+    }
+
+    function navigateToProfile() {
+        goto('/Profile');
+    }
+
+    function navigateToGallery() {
+        goto('/viewgallery');
+    }
+
+    // Consistent height generation function
+    function getConsistentHeight(image: GalleryImage): number {
+        // Use a combination of image properties to create a consistent seed
+        const seed = image.url.length + (image.name?.length || 0) + image.id;
+        
+        // Define height ranges
+        const minHeight = 250;
+        const maxHeight = 450;
+        
+        // Use a simple deterministic method to generate height
+        const height = minHeight + (seed % (maxHeight - minHeight));
+        
+        return height;
+    }
+
+    onMount(() => {});
 </script>
 
 <div class="container mx-auto p-4 relative">
@@ -249,16 +276,97 @@
                 Upload Images
             </button>
         </div>
-        <div class="flex items-center gap-4">
+        
+        <!-- Profile Dropdown -->
+        <div class="relative">
             <button 
-                on:click={navigateToUrImage}
-                class="px-4 py-2 bg-green-500 text-white rounded-full shadow-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+                on:click={toggleProfile}
+                class="flex items-center space-x-2 px-4 py-2 text-gray-800 rounded-lg hover:bg-gray-50 focus:outline-none"
             >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                </svg>
-                Your Images
+                <img 
+                    src={$userProfile.profilePicture} 
+                    alt="Profile" 
+                    class="w-8 h-8 rounded-full"
+                />
+                <span class="font-medium">{$userProfile.userName}</span>
             </button>
+
+            {#if isProfileOpen}
+                <div class="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-lg py-2 z-50 border">
+                    <div class="px-4 py-3 border-b">
+                        <div class="flex items-center space-x-3">
+                            <img 
+                                src={$userProfile.profilePicture} 
+                                alt="Profile" 
+                                class="w-10 h-10 rounded-full object-cover"
+                            />
+                            <div>
+                                <h3 class="text-sm font-semibold">{$userProfile.userName}</h3>
+                                <p class="text-xs text-gray-500">
+                                    {$userProfile.moods.join(', ')}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="py-2">
+                        <button
+                            on:click={() => goto('/Profile')}
+                            class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 8" />
+                            </svg>
+                            <span>Profile</span>
+                        </button>
+
+                        <button
+                            on:click={() => goto('/viewgallery')}
+                            class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span>View Gallery</span>
+                        </button>
+
+                        <button
+                            on:click={() => goto('/Gallery')}
+                            class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span>Upload Gallery</span>
+                        </button>
+
+                        <div class="border-t my-2"></div>
+
+                        <button
+                            on:click={() => goto('/settings')}
+                            class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>Settings</span>
+                        </button>
+
+                        <button
+                            on:click={() => {
+                                // Add sign out logic here
+                                goto('/');
+                            }}
+                            class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3 text-red-500"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            <span>Sign Out</span>
+                        </button>
+                    </div>
+                </div>
+            {/if}
         </div>
     </div>
 
@@ -529,6 +637,18 @@
                                 </div>
                             </div>
 
+                            <!-- Image Name -->
+                            <div class="mb-8">
+                                <h4 class="text-sm font-medium text-gray-700 mb-2">Image Name</h4>
+                                <input
+                                    type="text"
+                                    bind:value={editedImageName}
+                                    placeholder="Enter image name"
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                    aria-label="Image name"
+                                />
+                            </div>
+
                             <!-- Action Buttons -->
                             <div class="flex gap-3">
                                 <button 
@@ -552,41 +672,82 @@
     {/if}
 
     <!-- Gallery Grid -->
-    {#if images.length === 0}
+    {#if $uploadedImages.length === 0}
         <div class="text-center text-gray-500 py-8">
             <p>No images uploaded yet. Click the Upload button to add some!</p>
         </div>
     {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {#each images as image (image.id)}
-                <div class="relative group">
+        <div class="masonry-grid px-4 py-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {#each $uploadedImages as image (image.id)}
+                <div 
+                    class="relative group rounded-lg overflow-hidden bg-gray-100 break-inside-avoid" 
+                    style="height: {getConsistentHeight(image)}px;"
+                >
                     <img 
                         src={image.url} 
                         alt={image.name}
-                        class="w-full h-64 object-cover rounded-lg shadow-md"
+                        class="w-full h-full object-cover absolute top-0 left-0 transition-transform duration-300 group-hover:brightness-75"
                     />
-                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-300 rounded-lg flex items-center justify-center gap-2">
-                        <button 
-                            class="opacity-0 group-hover:opacity-100 px-4 py-2 bg-white text-black rounded hover:bg-gray-100 transition-all duration-300"
-                            on:click={() => openEditMode(image)}
-                            aria-label="Edit image"
-                        >
-                            Edit Image
-                        </button>
-                        <button 
-                            class="opacity-0 group-hover:opacity-100 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-all duration-300"
-                            on:click={() => deleteImage(image.id)}
-                            aria-label="Delete image"
-                        >
-                            Delete
-                        </button>
-                    </div>
-                    <div class="mt-2">
-                        <p class="text-sm text-gray-600">{image.name}</p>
-                        <p class="text-xs text-gray-400">{new Date(image.timestamp).toLocaleDateString()}</p>
+                    <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="text-white text-sm font-semibold truncate max-w-[200px]">{image.name}</h3>
+                                <p class="text-xs text-gray-300">{new Date(image.timestamp).toLocaleDateString()}</p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button 
+                                    on:click={() => openEditMode(image)}
+                                    class="bg-blue-500/80 text-white p-2 rounded-full hover:bg-blue-600 flex items-center justify-center transition-all duration-300 hover:scale-110"
+                                    aria-label="Edit image"
+                                >
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
+                                <button 
+                                    on:click={() => deleteImage(image.id)}
+                                    class="bg-red-500/80 text-white p-2 rounded-full hover:bg-red-600 flex items-center justify-center transition-all duration-300 hover:scale-110"
+                                    aria-label="Delete image"
+                                >
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             {/each}
         </div>
     {/if}
 </div>
+
+<style>
+    .masonry-grid {
+        column-count: 1;
+        column-gap: 1rem;
+    }
+
+    .masonry-item {
+        break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+
+    @media (min-width: 640px) {
+        .masonry-grid {
+            column-count: 2;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .masonry-grid {
+            column-count: 3;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .masonry-grid {
+            column-count: 4;
+        }
+    }
+</style>
