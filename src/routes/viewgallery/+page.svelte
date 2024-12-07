@@ -124,7 +124,7 @@
     <div class="container mx-auto p-4 relative">
         <div class="flex justify-between items-center mb-6">
             <div class="flex items-center gap-4">
-                <h1 class="text-3xl font-bold">View Gallery</h1>
+                <img src="/Shiroi.png" alt="SHiROi Logo" class="h-20 w-auto" />
             </div>
             <div class="relative">
                 <button 

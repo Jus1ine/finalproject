@@ -265,7 +265,9 @@
 <div class="container mx-auto p-4 relative">
     <div class="flex justify-between items-center mb-6">
         <div class="flex items-center gap-4">
-            <h1 class="text-3xl font-bold">Gallery</h1>
+            <div class="flex items-center gap-4">
+                <img src="/Shiroi.png" alt="SHiROi Logo" class="h-20 w-auto" />
+            </div>
             <button 
                 on:click={toggleModal}
                 class="px-4 py-2 bg-white text-[#e09f3e] border border-[#e09f3e] rounded-lg hover:bg-[#e09f3e]/10 transition-colors duration-300 flex items-center space-x-2"
