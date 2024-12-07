@@ -8,38 +8,31 @@
     let selectedImage: GalleryImage | null = null;
     let newCommentText = '';
     let comments: Comment[] = [];
-
     function toggleProfile() {
         isProfileOpen = !isProfileOpen;
     }
-
     function handleProfileKeydown(event: KeyboardEvent) {
         if (event.key === 'Enter' || event.key === ' ') {
             toggleProfile();
         }
     }
-
     function openImageModal(image: GalleryImage) {
         selectedImage = image;
         comments = image.comments || [];
     }
-
     function closeImageModal() {
         selectedImage = null;
         comments = [];
         newCommentText = '';
     }
-
     function addComment() {
         if (!selectedImage || !newCommentText.trim()) return;
-
         const newComment: Comment = {
             id: Date.now(),
             text: newCommentText.trim(),
             userName: $userProfile.userName,
             timestamp: new Date().toISOString()
         };
-
         uploadedImages.update(images => 
             images.map(img => 
                 img.id === selectedImage?.id 
@@ -47,30 +40,25 @@
                     : img
             )
         );
-
         comments = [...comments, newComment];
         newCommentText = '';
     }
-
     // Function to toggle like on an image
     function toggleLike(imageId: number, event: MouseEvent) {
         event.stopPropagation(); // Prevent opening modal when clicking like button
         uploadedImages.update(images =>
             images.map(img =>
                 img.id === imageId
-                    ? { 
+                    ? {
                         ...img, 
-                        likes: img.likes ? 
-                            img.likes.includes($userProfile.userName) ?
-                                img.likes.filter(user => user !== $userProfile.userName) :
-                                [...img.likes, $userProfile.userName] :
-                            [$userProfile.userName]
+                        likes: img.likes?.includes($userProfile.userName) 
+                            ? img.likes.filter(username => username !== $userProfile.userName)
+                            : [...(img.likes || []), $userProfile.userName]
                     }
                     : img
             )
         );
     }
-
     // Function to share image
     function shareImage(image: GalleryImage, event: MouseEvent) {
         event.stopPropagation(); // Prevent opening modal when clicking share button
@@ -87,7 +75,6 @@
                 .catch(console.error);
         }
     }
-
     // Function to generate a consistent shape and aspect ratio for images
     function getImageShape(image: GalleryImage): { 
         containerClass: string, 
@@ -133,7 +120,6 @@
         return shapeOptions[seed % shapeOptions.length];
     }
 </script>
-
 <div class="min-h-screen bg-white">
     <div class="container mx-auto p-4 relative">
         <div class="flex justify-between items-center mb-6">
@@ -152,7 +138,6 @@
                     />
                     <span class="font-medium">{$userProfile.userName}</span>
                 </button>
-
                 {#if isProfileOpen}
                     <div class="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-lg py-2 z-50 border">
                         <div class="px-4 py-3 border-b">
@@ -180,7 +165,6 @@
                                 </svg>
                                 <span>Profile</span>
                             </button>
-
                             <button
                                 on:click={() => goto('/viewgallery')}
                                 class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
@@ -190,7 +174,6 @@
                                 </svg>
                                 <span>View Gallery</span>
                             </button>
-
                             <button
                                 on:click={() => goto('/Gallery')}
                                 class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
@@ -200,9 +183,7 @@
                                 </svg>
                                 <span>Upload Gallery</span>
                             </button>
-
                             <div class="border-t my-2"></div>
-
                             <button
                                 on:click={() => goto('/settings')}
                                 class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
@@ -212,7 +193,6 @@
                                 </svg>
                                 <span>Settings</span>
                             </button>
-
                             <button
                                 on:click={() => {
                                     // Add sign out logic here
@@ -230,7 +210,6 @@
                 {/if}
             </div>
         </div>
-
         <!-- Gallery Grid -->
         {#if $uploadedImages.length === 0}
             <div class="text-center text-gray-500 py-8">
@@ -239,63 +218,50 @@
             </div>
         {:else}
             <div class="masonry-grid">
-                {#each $uploadedImages as image}
-                    <div class="masonry-item mb-4 break-inside-avoid" on:click={() => openImageModal(image)}>
-                        <div class="relative group rounded-lg overflow-hidden bg-gray-100">
-                            {#if image.url}
-                                {@const shape = getImageShape(image)}
-                                <div class={`relative ${shape.containerClass}`}>
-                                    <img
-                                        src={image.url}
-                                        alt={image.name || 'Gallery image'}
-                                        class={`w-full h-full ${shape.imageClass}`}
-                                    />
-                                    <!-- Heart and Share buttons -->
-                                    <div class="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            on:click={(e) => toggleLike(image.id, e)}
-                                            class="p-2 rounded-full bg-white/90 hover:bg-white shadow-lg transition-transform hover:scale-110"
-                                            title={image.likes?.includes($userProfile.userName) ? 'Unlike' : 'Like'}
-                                        >
-                                            <svg
-                                                class={`w-5 h-5 ${image.likes?.includes($userProfile.userName) ? 'text-red-500 fill-current' : 'text-gray-600'}`}
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                            >
-                                                <path
-                                                    d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                                                />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            on:click={(e) => shareImage(image, e)}
-                                            class="p-2 rounded-full bg-white/90 hover:bg-white shadow-lg transition-transform hover:scale-110"
-                                            title="Share"
-                                        >
-                                            <svg
-                                                class="w-5 h-5 text-gray-600"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="2"
-                                            >
-                                                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                                                <polyline points="16 6 12 2 8 6"/>
-                                                <line x1="12" y1="2" x2="12" y2="15"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <!-- Like count -->
-                                    {#if image.likes?.length}
-                                        <div class="absolute bottom-2 right-2 px-2 py-1 rounded-full bg-white/90 text-sm font-medium text-gray-700">
-                                            {image.likes.length} {image.likes.length === 1 ? 'like' : 'likes'}
-                                        </div>
-                                    {/if}
-                                </div>
-                            {/if}
+                {#each $uploadedImages as image (image.id)}
+                    <div 
+                        class="break-inside-avoid mb-4 relative group cursor-pointer"
+                        on:click={() => openImageModal(image)}
+                        on:keydown={(e) => e.key === 'Enter' && openImageModal(image)}
+                        tabindex="0"
+                        role="button"
+                    >
+                        <div class="relative">
+                            <img 
+                                src={image.url} 
+                                alt={image.name} 
+                                class="w-full rounded-lg shadow-md transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div class="absolute top-2 right-2 flex items-center space-x-2">
+                                <button 
+                                    on:click|stopPropagation={(event: MouseEvent) => toggleLike(image.id, event)}
+                                    class="bg-white/70 rounded-full p-2 hover:bg-white/90 transition"
+                                >
+                                    <svg 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        class="h-5 w-5 {image.likes?.includes($userProfile.userName) ? 'text-red-500' : 'text-gray-500'}" 
+                                        viewBox="0 0 20 20" 
+                                        fill="currentColor"
+                                    >
+                                        <path 
+                                            fill-rule="evenodd" 
+                                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
+                                            clip-rule="evenodd" 
+                                        />
+                                    </svg>
+                                </button>
+                                
+                                <!-- New Comment Count Badge -->
+                                <span class="bg-white/70 rounded-full px-2 py-1 text-xs font-bold text-gray-700 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M18 13V5a2 2 0 00-2-2H4a2 2 0 00-2 2v8a2 2 0 002 2h3l3 3 3-3h3a2 2 0 002-2zM5 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h3a1 1 0 100-2H6z" clip-rule="evenodd" />
+                                    </svg>
+                                    {image.comments?.length || 0}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <h3 class="text-sm font-semibold text-gray-800">{image.name}</h3>
                         </div>
                     </div>
                 {/each}
@@ -303,7 +269,6 @@
         {/if}
     </div>
 </div>
-
 <!-- Image Modal -->
 {#if selectedImage}
     <div 
@@ -329,7 +294,6 @@
                         Uploaded on {selectedImage ? new Date(selectedImage.timestamp).toLocaleDateString() : ''}
                     </p>
                 </div>
-
                 <!-- Comments Header -->
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-semibold">
@@ -391,7 +355,7 @@
                     <button 
                         on:click={addComment}
                         disabled={!newCommentText.trim()}
-                        class="w-full bg-white text-[#e09f3e] border border-[#e09f3e] py-3 rounded-xl hover:bg-[#e09f3e]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="w-full bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Post Comment
                     </button>
@@ -400,30 +364,25 @@
         </div>
     </div>
 {/if}
-
 <style>
     .masonry-grid {
         column-count: 1;
         column-gap: 1rem;
     }
-
     .masonry-item {
         break-inside: avoid;
         margin-bottom: 1rem;
     }
-
     @media (min-width: 640px) {
         .masonry-grid {
             column-count: 2;
         }
     }
-
     @media (min-width: 1024px) {
         .masonry-grid {
             column-count: 3;
         }
     }
-
     @media (min-width: 1280px) {
         .masonry-grid {
             column-count: 4;
