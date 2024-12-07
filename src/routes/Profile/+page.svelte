@@ -11,6 +11,11 @@
     let newProfilePicture = '';
     let selectedMoods: string[] = [];
 
+    let selectedTab: 'Posts' | 'About' = 'Posts';
+
+    let isEditingAbout = false;
+    let newAboutText = '';
+
     const moods = [
         { value: 'Professional', color: 'bg-blue-50 text-blue-600' },
         { value: 'Active', color: 'bg-green-50 text-green-600' },
@@ -20,6 +25,10 @@
         { value: 'Angry', color: 'bg-orange-50 text-orange-600' },
         { value: 'Nothing', color: 'bg-gray-50 text-gray-600' }
     ];
+
+    // Calculate total likes and comments
+    $: totalLikes = $uploadedImages.reduce((total, image) => total + (image.likes?.length || 0), 0);
+    $: totalComments = $uploadedImages.reduce((total, image) => total + (image.comments?.length || 0), 0);
 
     function toggleEditModal() {
         showEditModal = !showEditModal;
@@ -54,15 +63,38 @@
     function exitProfile() {
         goto('/viewgallery');
     }
+
+    function toggleAboutEdit() {
+        isEditingAbout = !isEditingAbout;
+        if (isEditingAbout) {
+            newAboutText = $userProfile.aboutText;
+        }
+    }
+
+    function saveAboutText() {
+        userProfile.update(profile => ({
+            ...profile,
+            aboutText: newAboutText
+        }));
+        isEditingAbout = false;
+    }
+
+    function toggleMood(mood: string) {
+        if (selectedMoods.includes(mood)) {
+            selectedMoods = selectedMoods.filter(m => m !== mood);
+        } else {
+            selectedMoods = [...selectedMoods, mood];
+        }
+    }
 </script>
 
-<div class="min-h-screen bg-[#DAE0E6]">
+<div class="container mx-auto p-4 relative min-h-screen bg-white">
     <!-- Profile Header -->
     <div class="relative pt-16">
         <!-- Back Button -->
         <button 
             on:click={exitProfile}
-            class="fixed top-4 left-4 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full text-gray-700 hover:bg-white transition-all duration-200 flex items-center space-x-2 shadow-sm z-10"
+            class="fixed top-4 left-4 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full text-[#e09f3e] hover:bg-white border border-[#e09f3e] transition-all duration-200 flex items-center space-x-2 shadow-sm z-10"
         >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -100,10 +132,9 @@
                                             {/each}
                                         </div>
                                     </div>
-                                    
                                     <button 
                                         on:click={toggleEditModal}
-                                        class="px-4 py-2 bg-[#FF4500] text-white rounded-md hover:bg-[#FF5722] transition-colors"
+                                        class="px-4 py-2 bg-white text-[#e09f3e] border border-[#e09f3e] rounded-lg hover:bg-[#e09f3e]/10 transition-colors duration-300"
                                     >
                                         Edit Profile
                                     </button>
@@ -115,10 +146,16 @@
                     <!-- Navigation Tabs -->
                     <div class="border-t border-gray-200">
                         <nav class="flex space-x-8 px-6" aria-label="Profile navigation">
-                            <button class="px-1 py-4 text-sm font-medium text-[#FF4500] border-b-2 border-[#FF4500]">
+                            <button 
+                                class={`px-1 py-4 text-sm font-medium ${selectedTab === 'Posts' ? 'text-[#e09f3e] border-b-2 border-[#e09f3e]' : 'text-gray-500 hover:text-gray-700'}`}
+                                on:click={() => selectedTab = 'Posts'}
+                            >
                                 Posts
                             </button>
-                            <button class="px-1 py-4 text-sm font-medium text-gray-500 hover:text-gray-700">
+                            <button 
+                                class={`px-1 py-4 text-sm font-medium ${selectedTab === 'About' ? 'text-[#e09f3e] border-b-2 border-[#e09f3e]' : 'text-gray-500 hover:text-gray-700'}`}
+                                on:click={() => selectedTab = 'About'}
+                            >
                                 About
                             </button>
                         </nav>
@@ -129,27 +166,108 @@
     </div>
 
     <!-- Image Grid (Pinterest Style) -->
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        {#if $uploadedImages.length === 0}
-            <div class="text-center text-gray-500 py-8">
-                <p>No images uploaded yet. Start uploading in the Gallery!</p>
-            </div>
-        {:else}
-            <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
-                {#each $uploadedImages as image}
-                    <div class="break-inside-avoid mb-4">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-shadow duration-300">
+    {#if selectedTab === 'Posts'}
+        <div class="max-w-7xl mx-auto px-4 py-8">
+            {#if $uploadedImages.length === 0}
+                <div class="text-center text-gray-500 py-8">
+                    <p>No images uploaded yet. Start uploading in the Gallery!</p>
+                </div>
+            {:else}
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-900">
+                        Your Posts ({$uploadedImages.length})
+                    </h2>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {#each $uploadedImages as image (image.id)}
+                        <div class="rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
                             <img 
                                 src={image.url} 
-                                alt={image.name}
-                                class="w-full h-auto object-cover"
+                                alt="User uploaded image" 
+                                class="w-full h-48 object-cover"
                             />
                         </div>
+                    {/each}
+                </div>
+            {/if}
+        </div>
+    {/if}
+
+    {#if selectedTab === 'About'}
+        <div class="max-w-7xl mx-auto px-4 py-8">
+            <div class="bg-white rounded-lg shadow-sm p-6 space-y-6">
+                <!-- User Stats Section -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-2xl font-bold text-gray-900">{$uploadedImages.length}</div>
+                        <div class="text-sm text-gray-600">Total Posts</div>
                     </div>
-                {/each}
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-2xl font-bold text-gray-900">{totalLikes}</div>
+                        <div class="text-sm text-gray-600">Total Likes</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-2xl font-bold text-gray-900">{totalComments}</div>
+                        <div class="text-sm text-gray-600">Total Comments</div>
+                    </div>
+                </div>
+
+                <!-- User Info Section -->
+                <div class="space-y-4">
+                    <!-- About Section -->
+                    <div class="mt-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold">About</h3>
+                            <button 
+                                on:click={toggleAboutEdit}
+                                class="px-3 py-1.5 text-[#e09f3e] border border-[#e09f3e] rounded-md hover:bg-[#e09f3e]/10 transition-colors duration-300"
+                            >
+                                {isEditingAbout ? 'Save' : 'Edit'}
+                            </button>
+                        </div>
+                        
+                        {#if isEditingAbout}
+                            <textarea
+                                bind:value={$userProfile.aboutText}
+                                class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                rows="4"
+                            ></textarea>
+                        {:else}
+                            <p class="text-gray-600">{$userProfile.aboutText || 'No about information added yet.'}</p>
+                        {/if}
+
+                        <!-- Moods Section -->
+                        <div class="mt-6">
+                            <h4 class="text-lg font-medium mb-3">Moods</h4>
+                            <div class="flex flex-wrap gap-2">
+                                {#each $userProfile.moods || [] as mood}
+                                    <span class="px-3 py-1 rounded-full text-sm 
+                                        {moods.find(m => m.value === mood)?.color || 'bg-gray-50 text-gray-600'}">
+                                        {mood}
+                                    </span>
+                                {/each}
+                                {#if !$userProfile.moods?.length}
+                                    <span class="text-gray-500 text-sm">No moods selected</span>
+                                {/if}
+                            </div>
+                        </div>
+
+                        <!-- Joined Date -->
+                        <div class="mt-6">
+                            <h4 class="text-lg font-medium mb-2">Joined</h4>
+                            <p class="text-gray-600">
+                                {new Date($userProfile.joinedDate).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                })}
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
-        {/if}
-    </div>
+        </div>
+    {/if}
 </div>
 
 <!-- Edit Profile Modal -->
@@ -172,26 +290,28 @@
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">Profile Picture</label>
-                        <div 
-                            class="w-32 h-32 mx-auto rounded-lg overflow-hidden cursor-pointer relative group"
-                            on:click={() => fileInput?.click()}
-                        >
-                            <img 
-                                src={newProfilePicture || $userProfile.profilePicture} 
-                                alt="Preview" 
-                                class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                            />
-                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 flex items-center justify-center transition-all duration-300">
-                                <svg 
-                                    xmlns="http://www.w3.org/2000/svg" 
-                                    class="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" 
-                                    fill="none" 
-                                    viewBox="0 0 24 24" 
-                                    stroke="currentColor"
-                                >
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
+                        <div class="relative w-32 h-32 mx-auto">
+                            <div 
+                                class="rounded-lg overflow-hidden border-4 border-white shadow-lg cursor-pointer"
+                                on:click={() => fileInput?.click()}
+                            >
+                                <img 
+                                    src={newProfilePicture || $userProfile.profilePicture} 
+                                    alt="Preview" 
+                                    class="w-full h-full object-cover"
+                                />
+                                <div class="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all duration-300">
+                                    <svg 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        class="h-8 w-8 text-white opacity-0 hover:opacity-100" 
+                                        fill="none" 
+                                        viewBox="0 0 24 24" 
+                                        stroke="currentColor"
+                                    >
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                         <input 
@@ -208,27 +328,21 @@
                         <input
                             type="text"
                             bind:value={newUserName}
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF4500] focus:ring-2 focus:ring-[#FF4500]/50 transition-all duration-300"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#e09f3e] focus:ring-2 focus:ring-[#e09f3e]/50 transition-all duration-300"
                             placeholder="Enter your username"
                         />
                     </div>
 
-                    <div>
+                    <div class="relative z-10">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Moods (Select Multiple)</label>
                         <div class="mt-2 flex justify-center flex-wrap gap-2">
                             {#each moods as mood}
                                 <button
                                     class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 
                                     {selectedMoods.includes(mood.value) 
-                                        ? 'bg-[#FF4500] text-white ring-2 ring-[#FF4500]' 
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
-                                    on:click={() => {
-                                        if (selectedMoods.includes(mood.value)) {
-                                            selectedMoods = selectedMoods.filter(m => m !== mood.value);
-                                        } else {
-                                            selectedMoods = [...selectedMoods, mood.value];
-                                        }
-                                    }}
+                                        ? 'bg-[#e09f3e] text-white ring-2 ring-[#e09f3e]' 
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+                                    on:click={() => toggleMood(mood.value)}
                                 >
                                     {mood.value}
                                 </button>
@@ -251,7 +365,7 @@
                     </button>
                     <button
                         on:click={saveProfileChanges}
-                        class="px-4 py-2 bg-[#FF4500] text-white rounded-md hover:bg-[#FF5722] transition-colors duration-300 transform active:scale-95"
+                        class="px-4 py-2 bg-[#e09f3e] text-white rounded-md hover:bg-[#e09f3e]/90 transition-colors duration-300 transform active:scale-95"
                     >
                         Save Changes
                     </button>

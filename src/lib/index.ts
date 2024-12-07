@@ -24,10 +24,20 @@ export interface UserProfile {
     userName: string;
     profilePicture: string;
     moods: string[];
+    aboutText: string;
+    joinedDate: string;
 }
 
-export const userProfile = writable<UserProfile>({
-    userName: 'User',
+export const userProfile = writable<{
+    userName: string;
+    profilePicture: string;
+    moods: string[];
+    aboutText: string;
+    joinedDate: string;
+}>({
+    userName: 'user',
     profilePicture: 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
-    moods: ['Professional']
+    moods: ['Professional'],
+    aboutText: '',
+    joinedDate: new Date().toISOString() // Uses the current date dynamically
 });

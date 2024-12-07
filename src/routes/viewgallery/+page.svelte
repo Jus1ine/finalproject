@@ -391,7 +391,7 @@
                     <button 
                         on:click={addComment}
                         disabled={!newCommentText.trim()}
-                        class="w-full bg-red-500 text-white py-3 rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="w-full bg-white text-[#e09f3e] border border-[#e09f3e] py-3 rounded-xl hover:bg-[#e09f3e]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Post Comment
                     </button>
