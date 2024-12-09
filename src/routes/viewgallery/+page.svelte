@@ -3,11 +3,124 @@
     import { uploadedImages, type GalleryImage, type Comment } from '$lib';
     import { userProfile } from '$lib';
     import { onMount } from 'svelte';
-    
+    import { initializeApp, getApps, getApp } from "firebase/app";
+    import { getDatabase, ref as dbRef, get, onChildAdded, onChildRemoved, onChildChanged, update, set, child } from "firebase/database";
+    import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
+    import { firebaseConfig } from "$lib/firebaseConfig";
+
+    // Initialize Firebase
+    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    const db = getDatabase(app); 
+    const auth = getAuth(app);
+
     let isProfileOpen = false;
     let selectedImage: GalleryImage | null = null;
     let newCommentText = '';
-    let comments: Comment[] = [];
+    $: comments = selectedImage?.comments || [];
+
+    onMount(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                goto('/');
+                return;
+            }
+            loadImages();
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    });
+
+    async function loadImages() {
+        console.group('Load Images Debug');
+        try {
+            const imagesRef = dbRef(db, 'images');
+            const snapshot = await get(imagesRef);
+            
+            console.log('Images Snapshot:', {
+                exists: snapshot.exists(),
+                data: snapshot.val()
+            });
+
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const images: GalleryImage[] = Object.keys(data)
+                    .map(key => {
+                        const imageData = data[key];
+                        const image: GalleryImage = {
+                            id: key,
+                            url: imageData.base64,
+                            name: imageData.name,
+                            timestamp: imageData.timestamp,
+                            userId: imageData.userId,
+                            comments: imageData.comments || [], 
+                            likes: imageData.likes || [],
+                            filters: imageData.filters || {
+                                brightness: 100,
+                                contrast: 100,
+                                saturation: 100,
+                                sharpness: 100,
+                                grain: 0,
+                                blur: 0,
+                                hue: 0,
+                                sepia: 0,
+                                grayscale: 0
+                            }
+                        };
+                        
+                        console.log(`Loaded Image ${key}:`, {
+                            name: image.name,
+                            urlLength: image.url ? image.url.substring(0, 50) + '...' : 'No URL',
+                            timestamp: image.timestamp
+                        });
+
+                        return image;
+                    })
+                    .sort((a, b) => b.timestamp - a.timestamp);
+
+                console.log('Total Images Loaded:', images.length);
+                uploadedImages.set(images);
+            } else {
+                console.log('No images found');
+                uploadedImages.set([]);
+            }
+            console.groupEnd();
+        } catch (error) {
+            console.error('Error loading images:', error);
+            uploadedImages.set([]);
+            alert('Failed to load images. Please check your connection.');
+            console.groupEnd();
+        }
+    }
+
+    // Real-time listeners for gallery updates
+    onMount(() => {
+        const imagesRef = dbRef(db, 'images');
+        onChildAdded(imagesRef, (data) => {
+            const newImage = data.val();
+            uploadedImages.update(images => [...images, newImage]);
+            console.log('Image added:', newImage);
+        });
+
+        onChildRemoved(imagesRef, (data) => {
+            const removedImage = data.val();
+            uploadedImages.update(images => images.filter(img => img.id !== removedImage.id));
+            console.log('Image removed:', removedImage);
+        });
+
+        onChildChanged(imagesRef, (data) => {
+            const changedImage = data.val();
+            uploadedImages.update(images => images.map(img => img.id === changedImage.id ? { ...img, ...changedImage } : img));
+            console.log('Image changed:', changedImage);
+        });
+        
+        // Ensure that the image structure is consistent
+        uploadedImages.subscribe(images => {
+            console.log('Current Images:', images);
+        });
+    });
+
     function toggleProfile() {
         isProfileOpen = !isProfileOpen;
     }
@@ -18,47 +131,163 @@
     }
     function openImageModal(image: GalleryImage) {
         selectedImage = image;
-        comments = image.comments || [];
     }
     function closeImageModal() {
         selectedImage = null;
-        comments = [];
         newCommentText = '';
     }
-    function addComment() {
-        if (!selectedImage || !newCommentText.trim()) return;
+
+    // Utility function to safely check likes with explicit typing
+    function hasLikes(image: GalleryImage | null | undefined, username: string | null | undefined): boolean {
+        // Comprehensive null and type checking
+        if (!image || !image.likes || !username) return false;
+        
+        return Array.isArray(image.likes) && 
+               typeof username === 'string' && 
+               image.likes.includes(username);
+    }
+
+    // Function to toggle like on an image with Firebase database update
+    async function toggleLike(imageId: string, event: MouseEvent) {
+        console.log('Toggle Like Initiated:', {
+            imageId,
+            currentUser: auth.currentUser,
+            userName: $userProfile.userName
+        });
+
+        event.stopPropagation(); // Prevent opening modal when clicking like button
+        
+        if (!auth.currentUser || !$userProfile.userName) {
+            console.error('User not authenticated or profile not loaded');
+            alert('Please log in to like images');
+            return;
+        }
+
+        const userName = $userProfile.userName;
+        const imageRef = dbRef(db, `images/${imageId}`);
+
+        console.log('Attempting to retrieve image data for like:', { imageId });
+        try {
+            const snapshot = await get(imageRef);
+            const imageData = snapshot.val();
+
+            console.log('Image Data Retrieved for Like:', imageData);
+
+            if (!imageData) {
+                console.error('No image found with ID:', imageId);
+                alert('Image not found');
+                return;
+            }
+
+            const currentLikes = imageData.likes || [];
+            const updatedLikes = currentLikes.includes(userName) 
+                ? currentLikes.filter((like: string) => like !== userName)
+                : [...currentLikes, userName];
+
+            console.log('Likes Before Update:', currentLikes);
+            console.log('Likes After Update:', updatedLikes);
+
+            // Update the entire image data
+            await update(imageRef, {
+                ...imageData,
+                likes: updatedLikes
+            });
+
+            console.log('Firebase Like Update Successful');
+
+            // Update local state
+            uploadedImages.update(images =>
+                images.map(img =>
+                    img.id === imageId 
+                        ? { ...img, likes: updatedLikes }
+                        : img
+                )
+            );
+
+            // Update selected image if it's the one being liked
+            if (selectedImage && selectedImage.id === imageId) {
+                selectedImage = { ...selectedImage, likes: updatedLikes };
+            }
+            console.log('Like Updated Successfully:', { imageId, updatedLikes });
+        } catch (error) {
+            console.error('Error toggling like:', error);
+            alert(`Failed to toggle like: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    // Function to add comment to an image with Firebase database update
+    async function addComment() {
+        console.log('Add Comment Initiated:', {
+            selectedImage,
+            commentText: newCommentText,
+            currentUser: auth.currentUser,
+            userName: $userProfile.userName
+        });
+
+        if (!selectedImage || !newCommentText.trim() || !auth.currentUser || !$userProfile.userName) {
+            console.error('Invalid comment submission');
+            alert('Please ensure you are logged in and have entered a comment');
+            return;
+        }
+
         const newComment: Comment = {
             id: Date.now(),
             text: newCommentText.trim(),
             userName: $userProfile.userName,
-            timestamp: new Date().toISOString()
+            timestamp: Date.now()
         };
-        uploadedImages.update(images => 
-            images.map(img => 
-                img.id === selectedImage?.id 
-                    ? { ...img, comments: [...(img.comments || []), newComment] } 
-                    : img
-            )
-        );
-        comments = [...comments, newComment];
-        newCommentText = '';
+        
+        const imageId = selectedImage.id;
+        const imageRef = dbRef(db, `images/${imageId}`);
+
+        console.log('Attempting to retrieve image data for comment:', { imageId });
+        try {
+            const snapshot = await get(imageRef);
+            const imageData = snapshot.val();
+
+            console.log('Image Data for Comment Retrieved:', imageData);
+
+            if (!imageData) {
+                console.error('No image found with ID:', imageId);
+                alert('Image not found');
+                return;
+            }
+
+            const currentComments = imageData.comments || [];
+            const updatedComments = [...currentComments, newComment];
+
+            console.log('Comments Before Update:', currentComments);
+            console.log('Comments After Update:', updatedComments);
+
+            // Update the entire image data
+            await update(imageRef, {
+                ...imageData,
+                comments: updatedComments
+            });
+
+            console.log('Firebase Comment Update Successful');
+
+            // Update local state
+            uploadedImages.update(images =>
+                images.map(img => 
+                    img.id === imageId 
+                        ? { ...img, comments: updatedComments }
+                        : img
+                )
+            );
+
+            // Update selected image
+            selectedImage = { ...selectedImage, comments: updatedComments };
+            
+            // Reset comment input
+            newCommentText = '';
+            console.log('Comment Added Successfully:', { imageId, newComment });
+        } catch (error) {
+            console.error('Error adding comment:', error);
+            alert(`Failed to add comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
-    // Function to toggle like on an image
-    function toggleLike(imageId: number, event: MouseEvent) {
-        event.stopPropagation(); // Prevent opening modal when clicking like button
-        uploadedImages.update(images =>
-            images.map(img =>
-                img.id === imageId
-                    ? {
-                        ...img, 
-                        likes: img.likes?.includes($userProfile.userName) 
-                            ? img.likes.filter(username => username !== $userProfile.userName)
-                            : [...(img.likes || []), $userProfile.userName]
-                    }
-                    : img
-            )
-        );
-    }
+
     // Function to share image
     function shareImage(image: GalleryImage, event: MouseEvent) {
         event.stopPropagation(); // Prevent opening modal when clicking share button
@@ -80,33 +309,33 @@
         containerClass: string, 
         imageClass: string 
     } {
-        const seed = image.url.length + (image.name?.length || 0) + image.id;
+        // Convert id to number, defaulting to 0 if conversion fails
+        const idNumber = typeof image.id === 'string' 
+            ? parseInt(image.id, 10) || 0 
+            : image.id;
+        
+        // Ensure numeric values for seed calculation
+        const urlLength = image.url.length || 0;
+        const nameLength = image.name?.length || 0;
+        
+        // Calculate seed using numeric values
+        const seed = urlLength + nameLength + idNumber;
         
         // Define different shape classes with Pinterest-like variations
         const shapeOptions = [
-            // Square
+            // Vertical photo
             { 
-                containerClass: 'aspect-square', // 1:1
+                containerClass: 'aspect-[3/4]', // Vertical photo ratio
                 imageClass: 'object-cover' 
             },
-            // Tall rectangle
+            // Horizontal photo
             { 
-                containerClass: 'aspect-[2/3]', // Taller rectangle
+                containerClass: 'aspect-[16/9]', // Horizontal photo ratio
                 imageClass: 'object-cover' 
             },
-            // Extra tall rectangle
+            // Square photo
             { 
-                containerClass: 'aspect-[3/5]', // Even taller rectangle
-                imageClass: 'object-cover' 
-            },
-            // Wide rectangle
-            { 
-                containerClass: 'aspect-[3/2]', // Wider rectangle
-                imageClass: 'object-cover' 
-            },
-            // Extra wide rectangle
-            { 
-                containerClass: 'aspect-[2/1]', // Even wider rectangle
+                containerClass: 'aspect-square', // Square photo ratio
                 imageClass: 'object-cover' 
             },
             // Standard photo
@@ -166,7 +395,7 @@
                                 <span>Profile</span>
                             </button>
                             <button
-                                on:click={() => goto('/viewgallery')}
+                                on:click={() => goto('/')}
                                 class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3"
                             >
                                 <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,16 +423,13 @@
                                 <span>Settings</span>
                             </button>
                             <button
-                                on:click={() => {
-                                    // Add sign out logic here
+                                on:click={async () => {
+                                    await signOut(auth);
                                     goto('/');
                                 }}
-                                class="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-3 text-red-500"
+                                class="text-red-500 hover:bg-red-100 w-full text-left px-4 py-2"
                             >
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                </svg>
-                                <span>Sign Out</span>
+                                Sign Out
                             </button>
                         </div>
                     </div>
@@ -218,7 +444,7 @@
             </div>
         {:else}
             <div class="masonry-grid">
-                {#each $uploadedImages as image (image.id)}
+                {#each $uploadedImages as image (image.id.toString())}
                     <div 
                         class="break-inside-avoid mb-4 relative group cursor-pointer"
                         on:click={() => openImageModal(image)}
@@ -234,12 +460,12 @@
                             />
                             <div class="absolute top-2 right-2 flex items-center space-x-2">
                                 <button 
-                                    on:click|stopPropagation={(event: MouseEvent) => toggleLike(image.id, event)}
+                                    on:click|stopPropagation={(event: MouseEvent) => toggleLike(image.id.toString(), event)}
                                     class="bg-white/70 rounded-full p-2 hover:bg-white/90 transition"
                                 >
                                     <svg 
                                         xmlns="http://www.w3.org/2000/svg" 
-                                        class="h-5 w-5 {image.likes?.includes($userProfile.userName) ? 'text-red-500' : 'text-gray-500'}" 
+                                        class="h-5 w-5 {hasLikes(image, $userProfile.userName) ? 'text-red-500' : 'text-gray-500'}" 
                                         viewBox="0 0 20 20" 
                                         fill="currentColor"
                                     >

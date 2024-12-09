@@ -1,7 +1,57 @@
 <script lang="ts">
+    import { onMount } from "svelte";
+    import { initializeApp, getApps, getApp } from "firebase/app";
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc } from "firebase/firestore";
+    import { getAuth, onAuthStateChanged } from "firebase/auth";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
     import { goto } from '$app/navigation';
-    import { uploadedImages, type GalleryImage, userProfile } from '$lib';
-    import { onMount } from 'svelte';
+    import { writable } from 'svelte/store';
+    import { uploadedImages, userProfile } from '$lib';
+    import { firebaseConfig } from "$lib/firebaseConfig";
+    import type { User } from 'firebase/auth';
+    import type { UserProfile } from '$lib';
+
+    // Initialize Firebase
+    const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const storage = getStorage(app);
+
+    const currentUser = writable<User | null>(null);
+
+    onMount(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                goto('/signin');
+                return;
+            }
+            currentUser.set(user);
+            loadUserProfile(user.uid);
+        });
+
+        return () => unsubscribe();
+    });
+
+    async function loadUserProfile(userId: string) {
+        try {
+            const userDocRef = doc(db, 'users', userId);
+            const userDoc = await getDocs(collection(db, 'users'));
+            userDoc.forEach((doc) => {
+                if (doc.id === userId) {
+                    const data = doc.data();
+                    userProfile.set({
+                        userName: data.userName || 'User',
+                        profilePicture: data.profilePicture || 'https://www.redditstatic.com/avatars/defaults/v2/avatar_default_1.png',
+                        moods: data.moods || ['Professional'],
+                        aboutText: data.aboutText || '',
+                        joinedDate: data.joinedDate || new Date().toISOString()
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('Error loading user profile:', error);
+        }
+    }
 
     let showEditModal = false;
     let fileInput: HTMLInputElement;
@@ -112,11 +162,12 @@
                             <div class="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg">
                                 <img 
                                     src={$userProfile.profilePicture} 
-                                    alt="Profile" 
+                                    alt=""  
                                     class="w-full h-full object-cover"
                                 />
                             </div>
                             
+
                             <div class="flex-1">
                                 <div class="flex justify-between items-center">
                                     <div>
@@ -222,8 +273,7 @@
                                 on:click={toggleAboutEdit}
                                 class="px-3 py-1.5 text-[#e09f3e] border border-[#e09f3e] rounded-md hover:bg-[#e09f3e]/10 transition-colors duration-300"
                             >
-                                {isEditingAbout ? 'Save' : 'Edit'}
-                            </button>
+                                {isEditingAbout ? 'Save' : 'Edit'}</button>
                         </div>
                         
                         {#if isEditingAbout}
@@ -297,7 +347,7 @@
                             >
                                 <img 
                                     src={newProfilePicture || $userProfile.profilePicture} 
-                                    alt="Preview" 
+                                    alt=""  
                                     class="w-full h-full object-cover"
                                 />
                                 <div class="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 flex items-center justify-center transition-all duration-300">
@@ -350,8 +400,7 @@
                         </div>
                         {#if selectedMoods.length > 0}
                             <p class="text-xs text-gray-500 text-center mt-2">
-                                Selected: {selectedMoods.join(', ')}
-                            </p>
+                                Selected: {selectedMoods.join(', ')}</p>
                         {/if}
                     </div>
                 </div>
