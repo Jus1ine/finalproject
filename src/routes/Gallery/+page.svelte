@@ -273,7 +273,7 @@
             const currentData = snapshot.val();
             const updatedImage = {
                 ...currentData,
-                name: editedImageName || currentData.name,
+                name: editedImageName.trim() || currentData.name,
                 filters: filters,
                 timestamp: Date.now() // Update timestamp to trigger real-time updates
             };
@@ -284,7 +284,7 @@
             uploadedImages.update(images => 
                 images.map(img => 
                     img.id === selectedImageForEdit?.id 
-                        ? { ...img, name: editedImageName || img.name, filters: filters }
+                        ? { ...img, name: editedImageName.trim() || img.name, filters: filters }
                         : img
                 )
             );
