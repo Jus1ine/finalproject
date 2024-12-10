@@ -496,7 +496,7 @@
                 <p class="mt-2">Upload some images to get started!</p>
             </div>
         {:else}
-            <div class="masonry-grid">
+            <div class="gallery">
                 {#each $uploadedImages as image (image.id.toString())}
                     <div 
                         class="break-inside-avoid mb-4 relative group cursor-pointer"
@@ -660,6 +660,17 @@
     </div>
 {/if}
 <style>
+    .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 10px;
+    }
+    .gallery img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+    }
     .masonry-grid {
         column-count: 1;
         column-gap: 1rem;
