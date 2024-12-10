@@ -99,20 +99,73 @@
         const imagesRef = dbRef(db, 'images');
         onChildAdded(imagesRef, (data) => {
             const newImage = data.val();
-            uploadedImages.update(images => [...images, newImage]);
-            console.log('Image added:', newImage);
+            const newImageWithId = {
+                id: data.key || '',
+                url: newImage.base64,
+                name: newImage.name,
+                timestamp: newImage.timestamp,
+                userId: newImage.userId,
+                comments: newImage.comments || [],
+                likes: newImage.likes || [],
+                filters: newImage.filters || {
+                    brightness: 100,
+                    contrast: 100,
+                    saturation: 100,
+                    sharpness: 100,
+                    grain: 0,
+                    blur: 0,
+                    hue: 0,
+                    sepia: 0,
+                    grayscale: 0
+                }
+            };
+            uploadedImages.update(images => {
+                const index = images.findIndex(img => img.id === newImageWithId.id);
+                if (index === -1) {
+                    return [newImageWithId, ...images];
+                }
+                return images;
+            });
+        });
+
+        onChildChanged(imagesRef, (data) => {
+            const updatedImage = data.val();
+            const updatedImageWithId = {
+                id: data.key || '',
+                url: updatedImage.base64,
+                name: updatedImage.name,
+                timestamp: updatedImage.timestamp,
+                userId: updatedImage.userId,
+                comments: updatedImage.comments || [],
+                likes: updatedImage.likes || [],
+                filters: updatedImage.filters || {
+                    brightness: 100,
+                    contrast: 100,
+                    saturation: 100,
+                    sharpness: 100,
+                    grain: 0,
+                    blur: 0,
+                    hue: 0,
+                    sepia: 0,
+                    grayscale: 0
+                }
+            };
+            uploadedImages.update(images => {
+                return images.map(img => 
+                    img.id === updatedImageWithId.id ? updatedImageWithId : img
+                );
+            });
+            
+            // Update selected image if it's the one being edited
+            if (selectedImage && selectedImage.id === updatedImageWithId.id) {
+                selectedImage = updatedImageWithId;
+            }
         });
 
         onChildRemoved(imagesRef, (data) => {
             const removedImage = data.val();
             uploadedImages.update(images => images.filter(img => img.id !== removedImage.id));
             console.log('Image removed:', removedImage);
-        });
-
-        onChildChanged(imagesRef, (data) => {
-            const changedImage = data.val();
-            uploadedImages.update(images => images.map(img => img.id === changedImage.id ? { ...img, ...changedImage } : img));
-            console.log('Image changed:', changedImage);
         });
         
         // Ensure that the image structure is consistent
@@ -457,6 +510,14 @@
                                 src={image.url} 
                                 alt={image.name} 
                                 class="w-full rounded-lg shadow-md transition-transform duration-300 group-hover:scale-105"
+                                style="filter: 
+                                    brightness({image.filters?.brightness ?? 100}%) 
+                                    contrast({image.filters?.contrast ?? 100}%) 
+                                    saturate({image.filters?.saturation ?? 100}%) 
+                                    blur({image.filters?.blur ?? 0}px) 
+                                    hue-rotate({image.filters?.hue ?? 0}deg) 
+                                    sepia({image.filters?.sepia ?? 0}%) 
+                                    grayscale({image.filters?.grayscale ?? 0}%)"
                             />
                             <div class="absolute top-2 right-2 flex items-center space-x-2">
                                 <button 
@@ -508,6 +569,14 @@
                     src={selectedImage?.url || ''} 
                     alt={selectedImage?.name || 'Gallery Image'} 
                     class="max-w-full max-h-[80vh] object-contain rounded-xl"
+                    style="filter: 
+                        brightness({selectedImage?.filters?.brightness ?? 100}%) 
+                        contrast({selectedImage?.filters?.contrast ?? 100}%) 
+                        saturate({selectedImage?.filters?.saturation ?? 100}%) 
+                        blur({selectedImage?.filters?.blur ?? 0}px) 
+                        hue-rotate({selectedImage?.filters?.hue ?? 0}deg) 
+                        sepia({selectedImage?.filters?.sepia ?? 0}%) 
+                        grayscale({selectedImage?.filters?.grayscale ?? 0}%)"
                 />
             </div>
             

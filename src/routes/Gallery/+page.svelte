@@ -256,111 +256,53 @@
     async function saveEditedImage(): Promise<void> {
         console.group(' Save Edited Image - Comprehensive Debug');
         
-        // Extensive logging of current state
-        console.log('Current Selected Image:', selectedImageForEdit);
-        console.log('Current Filters:', filters);
-        console.log('Edited Image Name:', editedImageName);
-
-        if (!selectedImageForEdit) {
-            console.error(' No image selected for editing');
-            alert('Please select an image to edit');
-            console.groupEnd();
-            return;
-        }
-
-        if (!auth.currentUser) {
-            console.error(' User not authenticated');
-            alert('You must be logged in to edit images');
-            console.groupEnd();
-            return;
-        }
-
-        if (!editedImageName || editedImageName.trim() === '') {
-            console.error(' Image name cannot be empty');
-            alert('Please enter a valid image name');
+        if (!selectedImageForEdit || !auth.currentUser) {
+            console.error('No image selected for edit or user not authenticated');
             console.groupEnd();
             return;
         }
 
         try {
-            // Safely handle potential null case with optional chaining
-            const imageId = selectedImageForEdit?.id;
-            if (!imageId) {
-                throw new Error('Invalid image ID');
+            const imageRef = dbRef(db, `images/${selectedImageForEdit.id}`);
+            const snapshot = await get(imageRef);
+            
+            if (!snapshot.exists()) {
+                throw new Error('Image not found in database');
             }
 
-            const imageRef = dbRef(db, `images/${imageId}`);
-            
-            // Prepare update data with both name and filters
-            const updateData: GalleryImage = {
-                ...selectedImageForEdit,
-                name: editedImageName.trim(), // Ensure name is updated
-                url: selectedImageForEdit.url, // Ensure base64 image is preserved
-                filters: {
-                    brightness: filters.brightness,
-                    contrast: filters.contrast,
-                    saturation: filters.saturation,
-                    sharpness: filters.sharpness,
-                    grain: filters.grain,
-                    blur: filters.blur,
-                    hue: filters.hue,
-                    sepia: filters.sepia,
-                    grayscale: filters.grayscale
-                }
+            const currentData = snapshot.val();
+            const updatedImage = {
+                ...currentData,
+                name: editedImageName || currentData.name,
+                filters: filters,
+                timestamp: Date.now() // Update timestamp to trigger real-time updates
             };
 
-            console.log(' Updating image with data:', updateData);
+            await update(imageRef, updatedImage);
 
-            // Update the image in Firebase
-            await set(imageRef, {
-                base64: updateData.url,
-                name: updateData.name, // Explicitly set the new name
-                timestamp: selectedImageForEdit?.timestamp ?? Date.now(),
-                userId: selectedImageForEdit?.userId,
-                comments: selectedImageForEdit?.comments || [],
-                likes: selectedImageForEdit?.likes || [],
-                filters: updateData.filters
-            });
-
-            // Update the local store to reflect the name change
+            // Update local state
             uploadedImages.update(images => 
                 images.map(img => 
-                    img.id === imageId 
-                        ? {
-                            ...img, 
-                            name: updateData.name, 
-                            filters: updateData.filters
-                          } 
+                    img.id === selectedImageForEdit?.id 
+                        ? { ...img, name: editedImageName || img.name, filters: filters }
                         : img
                 )
             );
 
-            console.log(' Image updated successfully');
-            
-            // Explicitly reset all edit-related state
-            selectedImageForEdit = null;
-            editedImageName = '';
-            
-            // Reset filters to default
-            filters = {
-                brightness: 100,
-                contrast: 100,
-                saturation: 100,
-                sharpness: 100,
-                grain: 0,
-                blur: 0,
-                hue: 0,
-                sepia: 0,
-                grayscale: 0
-            };
+            console.log('Image successfully updated:', {
+                id: selectedImageForEdit.id,
+                newName: editedImageName,
+                filters
+            });
 
-            console.log(' Edit mode closed and state reset');
-            console.groupEnd();
+            showEditMode = false;
+            selectedImageForEdit = null;
         } catch (error) {
-            console.error(' Error updating image:', error);
+            console.error('Error saving edited image:', error);
             alert('Failed to save image changes. Please try again.');
-            console.groupEnd();
         }
+        
+        console.groupEnd();
     }
 
     // Reactive statement to control edit mode
